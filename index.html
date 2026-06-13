@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>客戶業績達成率儀表板</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f6fa;
+    --card: #ffffff;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --primary: #2563eb;
+    --primary-light: #dbeafe;
+    --green: #16a34a;
+    --green-light: #dcfce7;
+    --amber: #d97706;
+    --amber-light: #fef3c7;
+    --red: #dc2626;
+    --red-light: #fee2e2;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  header h1 { font-size: 1.5rem; }
+  header .meta { color: var(--muted); font-size: 0.875rem; }
+
+  .global-filter {
+    display: flex;
+    align-items: center;
+    gap: 10px 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .global-filter .fg { display: flex; align-items: center; gap: 8px; }
+  .global-filter label { font-size: 0.875rem; color: var(--muted); }
+  .global-filter select {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    background: var(--card);
+    color: var(--text);
+    min-width: 150px;
+  }
+  .global-filter select#sp-filter { min-width: 180px; font-weight: 600; }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .card .label { color: var(--muted); font-size: 0.8rem; margin-bottom: 6px; }
+  .card .value { font-size: 1.6rem; font-weight: 700; }
+  .card .sub { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+  .card .value.good { color: var(--green); }
+  .card .value.warn { color: var(--amber); }
+  .card .value.bad { color: var(--red); }
+
+  .progress-track {
+    height: 10px;
+    background: var(--border);
+    border-radius: 5px;
+    overflow: hidden;
+    margin-top: 10px;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 5px;
+    background: var(--primary);
+    transition: width 0.6s ease;
+  }
+
+  .charts {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
+  .chart-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .chart-card h2 { font-size: 1rem; margin-bottom: 12px; }
+  .chart-wrap { position: relative; height: 360px; }
+
+  .table-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .table-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .table-toolbar h2 { font-size: 1rem; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; }
+  .filters input {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.875rem;
+    background: var(--card);
+    color: var(--text);
+    width: 180px;
+  }
+
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.875rem; min-width: 760px; }
+  th, td { padding: 10px 12px; text-align: right; white-space: nowrap; }
+  th:nth-child(1), td:nth-child(1),
+  th:nth-child(2), td:nth-child(2),
+  th:nth-child(3), td:nth-child(3),
+  th:nth-child(4), td:nth-child(4) { text-align: left; }
+  thead th {
+    color: var(--muted);
+    font-weight: 600;
+    border-bottom: 2px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+  }
+  thead th .arrow { font-size: 0.7rem; }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:hover { background: var(--bg); }
+  td.cust-name { font-weight: 600; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .badge.good { background: var(--green-light); color: var(--green); }
+  .badge.warn { background: var(--amber-light); color: var(--amber); }
+  .badge.bad { background: var(--red-light); color: var(--red); }
+  .badge.muted { background: var(--border); color: var(--muted); }
+
+  .row-bar {
+    display: inline-block;
+    vertical-align: middle;
+    width: 80px;
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-left: 8px;
+  }
+  .row-bar i { display: block; height: 100%; background: var(--primary); }
+
+  .count-hint { font-size: 0.8rem; color: var(--muted); }
+  footer { margin-top: 24px; text-align: center; color: var(--muted); font-size: 0.8rem; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1 id="page-title">客戶業績達成率儀表板</h1>
+    <span class="meta" id="updated-at"></span>
+  </header>
+
+  <div class="global-filter">
+    <div class="fg">
+      <label for="sp-filter">業務</label>
+      <select id="sp-filter"><option value="">全部業務</option></select>
+    </div>
+    <div class="fg">
+      <label for="series-filter">產品系列</label>
+      <select id="series-filter"><option value="">全部系列</option></select>
+    </div>
+    <div class="fg">
+      <label for="channel-filter">通路</label>
+      <select id="channel-filter"><option value="">全部通路</option></select>
+    </div>
+  </div>
+
+  <section class="cards" id="summary-cards"></section>
+
+  <section class="charts">
+    <div class="chart-card">
+      <h2 id="top-title">客戶業績排行（累計）</h2>
+      <div class="chart-wrap"><canvas id="top-chart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h2>各通路達成率</h2>
+      <div class="chart-wrap"><canvas id="channel-chart"></canvas></div>
+    </div>
+  </section>
+
+  <section class="table-card">
+    <div class="table-toolbar">
+      <h2 id="table-title">客戶一覽</h2>
+      <div class="filters">
+        <input id="name-search" type="search" placeholder="搜尋客戶 / 體系…">
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th data-sort="name">客戶</th>
+            <th data-sort="channel">通路</th>
+            <th data-sort="sp">業務</th>
+            <th data-sort="city">縣市</th>
+            <th data-sort="yearTarget">年度目標</th>
+            <th data-sort="achieved">累計業績</th>
+            <th data-sort="rate">達成率</th>
+            <th data-sort="pace">進度狀態</th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+    <p class="count-hint" id="count-hint" style="margin-top:12px"></p>
+  </section>
+
+  <footer>資料來源：data.js ｜ 更新資料後 push 到 GitHub 即會自動反映</footer>
+</div>
+
+<script src="data.js"></script>
+<script>
+(function () {
+  const data = CUSTOMER_DATA;
+  const MONTH_LABELS = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
+
+  // 有資料的月份數：以任何客戶任何系列有填資料的最後一個月為準
+  const monthsFilled = (() => {
+    let last = 0;
+    data.salespeople.forEach(p => p.customers.forEach(c => c.products.forEach(x =>
+      x.monthly.forEach((v, i) => { if (v !== null) last = Math.max(last, i + 1); }))));
+    return last;
+  })();
+  const timeProgress = monthsFilled / 12;
+
+  // ---- 格式化 ----
+  const fmtMoney = v => {
+    if (v >= 100000000) return (v / 100000000).toFixed(2) + " 億";
+    if (v >= 10000) return Math.round(v / 10000).toLocaleString("zh-TW") + " 萬";
+    return Math.round(v).toLocaleString("zh-TW") + " 元";
+  };
+  const fmtPct = v => (v * 100).toFixed(1) + "%";
+  const paceClass = pace =>
+    pace === null ? "" : (pace >= 1 ? "good" : (pace >= 0.9 ? "warn" : "bad"));
+  const paceLabel = pace =>
+    pace === null ? "無目標" : (pace >= 1 ? "超前" : (pace >= 0.9 ? "接近" : "落後"));
+  const paceBadge = pace => `<span class="badge ${pace === null ? "muted" : paceClass(pace)}">${paceLabel(pace)}</span>`;
+
+  // ---- 依篩選彙總出「客戶層級」資料列 ----
+  // 未選系列時排除無目標的系列，使達成率分子分母口徑一致；
+  // 選定單一系列時則完整顯示該系列（含無目標者）
+  function aggregate(spName, series, channel) {
+    const rows = [];
+    data.salespeople.forEach(p => {
+      if (spName && p.name !== spName) return;
+      p.customers.forEach(c => {
+        if (channel && c.channel !== channel) return;
+        const prods = series ? c.products.filter(x => x.series === series)
+                             : c.products.filter(x => x.yearTarget > 0);
+        if (!prods.length) return;
+        const monthly = MONTH_LABELS.map((_, i) =>
+          i < monthsFilled ? prods.reduce((s, x) => s + (x.monthly[i] || 0), 0) : null);
+        const yearTarget = prods.reduce((s, x) => s + x.yearTarget, 0);
+        const achieved = monthly.reduce((s, v) => s + (v || 0), 0);
+        if (yearTarget === 0 && achieved === 0) return;
+        const rate = yearTarget > 0 ? achieved / yearTarget : null;
+        const expected = yearTarget * timeProgress;
+        const pace = expected > 0 ? achieved / expected : null;
+        rows.push({ name: c.name, channel: c.channel, system: c.system, city: c.city,
+                    sp: p.name, group: p.group, yearTarget, achieved, rate, pace, monthly });
+      });
+    });
+    return rows;
+  }
+
+  // ---- 標題與更新時間 ----
+  document.getElementById("page-title").textContent = data.year + " 年度客戶業績達成率儀表板";
+  document.getElementById("updated-at").textContent =
+    "資料更新：" + data.updatedAt + "（已記錄至 " + monthsFilled + " 月）";
+
+  // ---- 篩選器選項 ----
+  const spFilter = document.getElementById("sp-filter");
+  const seriesFilter = document.getElementById("series-filter");
+  const channelFilter = document.getElementById("channel-filter");
+  const nameSearch = document.getElementById("name-search");
+
+  data.salespeople.forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.name; opt.textContent = p.name + "（" + p.group + "）";
+    spFilter.appendChild(opt);
+  });
+
+  const seriesTotals = {};
+  data.salespeople.forEach(p => p.customers.forEach(c => c.products.forEach(x => {
+    seriesTotals[x.series] = (seriesTotals[x.series] || 0) + x.yearTarget;
+  })));
+  Object.keys(seriesTotals).sort((a, b) => seriesTotals[b] - seriesTotals[a]).forEach(s => {
+    const opt = document.createElement("option");
+    opt.value = s;
+    opt.textContent = seriesTotals[s] > 0 ? s : s + "（無目標）";
+    seriesFilter.appendChild(opt);
+  });
+
+  const channelOrder = ["醫學中心","區域醫院","地區醫院","診所(含門前藥局)","健保藥局","物流"];
+  const channels = [...new Set(data.salespeople.flatMap(p => p.customers.map(c => c.channel)))]
+    .filter(Boolean)
+    .sort((a, b) => {
+      const ia = channelOrder.indexOf(a), ib = channelOrder.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+  channels.forEach(ch => {
+    const opt = document.createElement("option");
+    opt.value = ch; opt.textContent = ch;
+    channelFilter.appendChild(opt);
+  });
+
+  const css = getComputedStyle(document.documentElement);
+  const cPrimary = css.getPropertyValue("--primary").trim();
+  const cGreen = css.getPropertyValue("--green").trim();
+  const cAmber = css.getPropertyValue("--amber").trim();
+  const cRed = css.getPropertyValue("--red").trim();
+  const paceColor = pace => pace === null ? cPrimary :
+    (pace >= 1 ? cGreen : (pace >= 0.9 ? cAmber : cRed));
+
+  let topChart = null, channelChart = null;
+  let sortKey = "achieved", sortAsc = false;
+  let rows = [];
+
+  // ---- 摘要卡片 ----
+  function renderCards() {
+    const target = rows.reduce((s, r) => s + r.yearTarget, 0);
+    const achieved = rows.reduce((s, r) => s + r.achieved, 0);
+    const rate = target > 0 ? achieved / target : null;
+    const pace = rate !== null && timeProgress > 0 ? rate / timeProgress : null;
+    const cls = paceClass(pace);
+    const scope = spFilter.value || "全部業務";
+
+    document.getElementById("summary-cards").innerHTML = `
+      <div class="card">
+        <div class="label">${scope}・年度目標</div>
+        <div class="value">${target > 0 ? fmtMoney(target) : "—"}</div>
+        <div class="sub">共 ${rows.length} 個客戶</div>
+      </div>
+      <div class="card">
+        <div class="label">累計業績（1–${monthsFilled} 月）</div>
+        <div class="value">${fmtMoney(achieved)}</div>
+        <div class="sub">${seriesFilter.value ? seriesFilter.value : "不含無目標系列"}</div>
+      </div>
+      <div class="card">
+        <div class="label">年度達成率</div>
+        <div class="value ${cls}">${rate === null ? "—" : fmtPct(rate)}</div>
+        <div class="progress-track"><div class="progress-fill" style="width:${rate === null ? 0 : Math.min(rate * 100, 100)}%"></div></div>
+        <div class="sub">時間進度 ${fmtPct(timeProgress)}（${monthsFilled}/12 個月）</div>
+      </div>
+      <div class="card">
+        <div class="label">進度狀態</div>
+        <div class="value ${cls}">${paceLabel(pace)}</div>
+        <div class="sub">${pace === null ? "此範圍未設定目標金額" : "達成率為同期應有進度的 " + fmtPct(pace)}</div>
+      </div>`;
+  }
+
+  // ---- 客戶業績排行 (Top 15) ----
+  function renderTop() {
+    const showSp = !spFilter.value;
+    const top = [...rows].sort((a, b) => b.achieved - a.achieved).slice(0, 15);
+    document.getElementById("top-title").textContent =
+      (spFilter.value ? spFilter.value + "：" : "") + "客戶業績排行（累計 Top 15）";
+
+    if (topChart) topChart.destroy();
+    topChart = new Chart(document.getElementById("top-chart"), {
+      type: "bar",
+      data: {
+        labels: top.map(r => showSp ? r.name + "／" + r.sp : r.name),
+        datasets: [{
+          label: "累計業績",
+          data: top.map(r => r.achieved),
+          backgroundColor: top.map(r => paceColor(r.pace) + "cc")
+        }]
+      },
+      options: {
+        indexAxis: "y", responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => {
+            const r = top[ctx.dataIndex];
+            const parts = ["累計業績：" + fmtMoney(r.achieved)];
+            if (r.rate !== null) parts.push("達成率：" + fmtPct(r.rate) + "（" + paceLabel(r.pace) + "）");
+            else parts.push("無目標");
+            return parts;
+          } } }
+        },
+        scales: { x: { ticks: { callback: v => fmtMoney(v) } } }
+      }
+    });
+  }
+
+  // ---- 各通路達成率 ----
+  function renderChannels() {
+    const map = {};
+    rows.forEach(r => {
+      const ch = r.channel || "（未分類）";
+      (map[ch] = map[ch] || { t: 0, a: 0 });
+      map[ch].t += r.yearTarget; map[ch].a += r.achieved;
+    });
+    const stats = Object.keys(map).map(ch => ({
+      channel: ch, rate: map[ch].t > 0 ? map[ch].a / map[ch].t : 0
+    })).sort((x, y) => y.rate - x.rate);
+
+    if (channelChart) channelChart.destroy();
+    channelChart = new Chart(document.getElementById("channel-chart"), {
+      type: "bar",
+      data: {
+        labels: stats.map(s => s.channel),
+        datasets: [{
+          label: "達成率",
+          data: stats.map(s => +(s.rate * 100).toFixed(1)),
+          backgroundColor: stats.map(s => paceColor(timeProgress > 0 ? s.rate / timeProgress : null) + "cc")
+        }]
+      },
+      options: {
+        indexAxis: "y", responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => "達成率：" + ctx.raw + "%" } }
+        },
+        scales: { x: { ticks: { callback: v => v + "%" }, suggestedMax: 100 } }
+      }
+    });
+  }
+
+  // ---- 客戶一覽表格 ----
+  function renderTable() {
+    const kw = nameSearch.value.trim();
+    let view = rows.filter(r => !kw || r.name.includes(kw) || (r.system && r.system.includes(kw)));
+
+    view.sort((a, b) => {
+      let va = a[sortKey], vb = b[sortKey];
+      if (va === null) va = -Infinity;
+      if (vb === null) vb = -Infinity;
+      const cmp = typeof va === "string" ? va.localeCompare(vb, "zh-Hant") : va - vb;
+      return sortAsc ? cmp : -cmp;
+    });
+
+    document.getElementById("table-body").innerHTML = view.map(r => `
+      <tr>
+        <td class="cust-name">${r.name}</td>
+        <td>${r.channel || "—"}</td>
+        <td>${r.sp}</td>
+        <td>${r.city || "—"}</td>
+        <td>${r.yearTarget > 0 ? fmtMoney(r.yearTarget) : "—"}</td>
+        <td>${fmtMoney(r.achieved)}</td>
+        <td>${r.rate === null ? "—" : fmtPct(r.rate) + `<span class="row-bar"><i style="width:${Math.min(r.rate * 100, 100)}%"></i></span>`}</td>
+        <td>${paceBadge(r.pace)}</td>
+      </tr>`).join("") ||
+      `<tr><td colspan="8" style="text-align:center;color:var(--muted)">沒有符合的資料</td></tr>`;
+
+    document.getElementById("count-hint").textContent =
+      `顯示 ${view.length} 個客戶` + (kw ? `（從 ${rows.length} 個中搜尋）` : "");
+
+    document.querySelectorAll("thead th").forEach(th => {
+      const base = th.textContent.replace(/[▲▼]\s*$/, "").trim();
+      th.innerHTML = base + (th.dataset.sort === sortKey ? ` <span class="arrow">${sortAsc ? "▲" : "▼"}</span>` : "");
+    });
+  }
+
+  function renderAll() {
+    rows = aggregate(spFilter.value, seriesFilter.value, channelFilter.value);
+    document.getElementById("table-title").textContent =
+      (spFilter.value ? spFilter.value + " 的客戶一覽" : "客戶一覽");
+    renderCards();
+    renderTop();
+    renderChannels();
+    renderTable();
+  }
+
+  document.querySelectorAll("thead th").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.sort;
+      if (sortKey === key) { sortAsc = !sortAsc; }
+      else { sortKey = key; sortAsc = ["name", "channel", "sp", "city"].includes(key); }
+      renderTable();
+    });
+  });
+  spFilter.addEventListener("change", renderAll);
+  seriesFilter.addEventListener("change", renderAll);
+  channelFilter.addEventListener("change", renderAll);
+  nameSearch.addEventListener("input", renderTable);
+
+  renderAll();
+})();
+</script>
+</body>
+</html>
